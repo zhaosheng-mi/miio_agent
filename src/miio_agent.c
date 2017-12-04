@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT, sighandler);
 	signal(SIGPIPE, SIG_IGN);
 
-	miot_fd = miot_connect_init();
+	miot_fd = 1;//miot_connect_init();
 	agent_listenfd = agent_server_init();
 
 	if (miot_fd <= 0 || agent_listenfd <=0) {
@@ -113,10 +113,10 @@ int main(int argc, char *argv[])
 
 	memset(&agent, 0, sizeof(agent));
 
-	agent.pollfds[agent.count_pollfds].fd = miot_fd;
+/*	agent.pollfds[agent.count_pollfds].fd = miot_fd;
 	agent.pollfds[agent.count_pollfds].events = POLLIN;
 	log_printf(LOG_INFO, "miot client fd: %d\n", agent.pollfds[agent.count_pollfds].fd);
-	agent.count_pollfds++;
+	agent.count_pollfds++;*/
 
 	agent.pollfds[agent.count_pollfds].fd = agent_listenfd;
 	agent.pollfds[agent.count_pollfds].events = POLLIN;
@@ -124,13 +124,13 @@ int main(int argc, char *argv[])
 	agent.count_pollfds++;
 
 	/* timer */
-	timer_fd = timer_setup();
+/*	timer_fd = timer_setup();
 	assert(timer_fd > 0);
 	timer_start(timer_fd, TIMER_INTERVAL, TIMER_INTERVAL);
 	agent.pollfds[agent.count_pollfds].fd = timer_fd;
 	agent.pollfds[agent.count_pollfds].events = POLLIN;
 	log_printf(LOG_INFO, "timer fd: %d\n", agent.pollfds[agent.count_pollfds].fd);
-	agent.count_pollfds++;
+	agent.count_pollfds++;*/
 
 	if (daemonize)
 		if (daemon(0, 1) < 0)
@@ -160,11 +160,11 @@ int main(int argc, char *argv[])
 				delete_fd_from_agent(agent.pollfds[i].fd);
 				n--;
 			} else if (agent.pollfds[i].revents & POLLIN) {
-				if (agent.pollfds[i].fd == timer_fd)
+/*				if (agent.pollfds[i].fd == timer_fd)
 					timer_handler(timer_fd);
 				else if (agent.pollfds[i].fd == miot_fd)
 					agent_recv_handler(miot_fd, 0);
-				else if (agent.pollfds[i].fd == agent_listenfd)
+				else*/ if (agent.pollfds[i].fd == agent_listenfd)
 					agent_listen_handler(agent_listenfd);
 				else
 					agent_recv_handler(agent.pollfds[i].fd, 1);
@@ -364,12 +364,15 @@ int client_msg_handler(char *msg, int len, int sockfd)
 				}
 				ret = 0;
 			}
-		} else if (json_verify_get_int(msg, "id", &old_id) == 0 ) {
+		} else {
+			ret = send_to_register_client(msg, len);
+		}
+		/* else if (json_verify_get_int(msg, "id", &old_id) == 0 ) {
 			int msg_len;
 			char *newmsg;
 			struct id_node *p;
 			int new_id = get_newid();
-			/* replace with new id */
+			// replace with new id 
 			json_object_object_del(save_obj, "id");
 			json_object_object_add(save_obj, "id", json_object_new_int(new_id));
 			newmsg = (char *)json_object_to_json_string_ext(save_obj, JSON_C_TO_STRING_PLAIN);
@@ -386,7 +389,7 @@ int client_msg_handler(char *msg, int len, int sockfd)
 			id_insert(&id_tree, p);
 		} else {
 			ret = send(fd, msg, len, 0);
-		}
+		}*/
 		json_object_put(save_obj);
 	} else {
 		//ack, just send to miot
