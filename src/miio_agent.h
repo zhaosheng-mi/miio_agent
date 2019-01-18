@@ -82,9 +82,9 @@ void update_id_tree(void);
 
 int delete_fd_from_agent(int sockfd);
 
-int send_to_register_client(char *msg, int msg_len);
+int send_cmd_to_client(char *msg, int msg_len);
 int send_ack_to_client(char *msg);
-
+int general_send_one(int sock, const char *buf, int size);
 void logfile_init(char *filename);
 void log_printf(log_level_t level, const char *fmt, ...);
 

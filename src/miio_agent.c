@@ -147,8 +147,9 @@ int main(int argc, char *argv[])
 		for (i = 0; i < agent.count_pollfds && n > 0; i++) {
 			if (agent.pollfds[i].revents & (POLLNVAL | POLLHUP | POLLERR)) {
 				int j = i;
-				log_printf(LOG_WARNING, "agent.pollfds[i].revents: %08x, %d\n",agent.pollfds[i].revents, agent.pollfds[i].fd);
+				log_printf(LOG_WARNING, "agent.pollfds[%d].revents: %08x, %d\n",i,agent.pollfds[i].revents, agent.pollfds[i].fd);
 				if (agent.pollfds[i].fd == miot_fd) {
+					log_printf(LOG_ERROR, "miot_fd :%d is closed, will be reconnect\n", miot_fd);
 					close(miot_fd);
 					agent.pollfds[i].fd = -1;
 					miot_fd = -1;
@@ -299,7 +300,7 @@ int miot_msg_handler(char *msg, int msg_len)
 	if (json_verify_method(msg, "method") == 0) {
 		/* It's a command msg */
 		//log_printf(LOG_DEBUG, "cloud/mobile cmd: %s,len: %d\n", msg, msg_len);
-		ret = send_to_register_client(msg, msg_len);
+		ret = send_cmd_to_client(msg, msg_len);
 	} else {
 		/* It's a report ACK msg */
 		//log_printf(LOG_DEBUG, "cloud ack: %s, len: %d\n", msg, msg_len);
@@ -376,7 +377,7 @@ int client_msg_handler(char *msg, int len, int sockfd)
 			msg_len = strlen(newmsg);
 			log_printf(LOG_INFO, "U:new id:%d, old_id:%d, fd:%d: len: %d\n", new_id, old_id, sockfd, msg_len);
 			log_printf(LOG_DEBUG, "newmsg  is %s\n", newmsg);
-			ret = send(fd, newmsg, msg_len, 0);
+			ret = general_send_one(fd, newmsg, msg_len);
 
 			p = (struct id_node *)malloc(sizeof(struct id_node));
 			p->new_id = new_id;
@@ -385,13 +386,13 @@ int client_msg_handler(char *msg, int len, int sockfd)
 			p->ts= time(NULL);
 			id_insert(&id_tree, p);
 		} else {
-			ret = send(fd, msg, len, 0);
+			ret = general_send_one(fd, msg, len);
 		}
 		json_object_put(save_obj);
 	} else {
 		//ack, just send to miot
 		log_printf(LOG_INFO, "U:ACK,fd:%d, len:%d\n", sockfd, len);
-		ret = send(fd, msg, len, 0);
+		ret = general_send_one(fd, msg, len);
 	}
 	return ret;
 }
@@ -603,15 +604,17 @@ int delete_fd_from_agent(int sockfd)
 
 	remove_fd_from_keytree(sockfd);
 	remove_fd_from_idtree(sockfd);
+	close(agent.pollfds[i].fd);
 
 	for (i = 0; i < agent.count_pollfds; i++) {
 		if (agent.pollfds[i].fd == sockfd)
 			break;
 	}
 
+	log_printf(LOG_INFO, "%s(), sockfd: %d, i: %d\n", __func__, sockfd, i);
+
 	if (i == agent.count_pollfds) return -1;
 
-	close(agent.pollfds[i].fd);
 	while (i < agent.count_pollfds - 1 && agent.pollfds[i].fd) {
 		agent.pollfds[i] = agent.pollfds[i + 1];
 		i++;
@@ -711,7 +714,7 @@ void print_registered_key(void)
 	log_printf(LOG_DEBUG,"============end===========\n");
 }
 
-int send_to_register_client(char *msg, int msg_len)
+int send_cmd_to_client(char *msg, int msg_len)
 {
 	int ret =-1, key_found = 0;
 	char *key;
@@ -733,7 +736,7 @@ int send_to_register_client(char *msg, int msg_len)
 	if (key_found == 1) {
 		int i = 0;
 		while (i < MAX_CLIENT_NUM && p->fd[i]) {
-			ret = send(p->fd[i], msg, msg_len, 0);
+			ret = general_send_one(p->fd[i], msg, msg_len);
 			log_printf(LOG_INFO,"S:cmd,fd:%d, len:%d\n",  p->fd[i], ret);
 			i++;
 		}
@@ -869,8 +872,8 @@ int send_ack_to_client(char *msg)
 		newmsg = (char *)json_object_to_json_string_ext(parse, JSON_C_TO_STRING_PLAIN);
 		msg_len = strlen(newmsg);
 
-		ret = send(fd, newmsg, msg_len, 0);
 		log_printf(LOG_INFO, "S:ACK, new_id:%d, old_id:%d, fd:%d,length: %d\n", id, old_id, fd, msg_len);
+		ret = general_send_one(fd, newmsg, msg_len);
 		json_object_put(parse);
 	} else {
 		log_printf(LOG_WARNING, "id %d not found\n",  id);
@@ -916,6 +919,28 @@ void free_id_tree(void)
 		free(p);
 		node = rb_first(&id_tree);
 	}
+}
+
+int general_send_one(int sock, const char *buf, int size)
+{
+	ssize_t sent = 0;
+	ssize_t ret = 0;
+
+	while (size > 0) {
+		ret = send(sock, buf + sent, size, MSG_DONTWAIT);
+		if (ret < 0) {
+			perror("agent sock send error");
+			log_printf(LOG_ERROR, "%s: %d send error\n", __func__, sock);
+			return ret;
+		}
+
+		if (ret < size)
+			log_printf(LOG_WARNING, "Partial written, total: size: %d,send: %d\n", size, ret);
+
+		sent += ret;
+		size -= ret;
+	}
+	return ret;
 }
 
 void logfile_init(char *filename)
