@@ -192,6 +192,7 @@ int  miot_connect_init(void)
 
 	if (connect(miot_fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
 		log_printf(LOG_ERROR, "Connect to server error: %s:%d\n", SERVER_IP, MIOT_SERVER_PORT);
+		close(miot_fd);
 		return -1;
 	}
 	return miot_fd;
@@ -604,7 +605,7 @@ int delete_fd_from_agent(int sockfd)
 
 	remove_fd_from_keytree(sockfd);
 	remove_fd_from_idtree(sockfd);
-	close(agent.pollfds[i].fd);
+	close(sockfd);
 
 	for (i = 0; i < agent.count_pollfds; i++) {
 		if (agent.pollfds[i].fd == sockfd)
