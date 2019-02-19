@@ -55,6 +55,16 @@ static void sighandler(int sig)
 	exit(-1);
 }
 
+void dump_pollfd(void)
+{
+	int i = 0;
+
+	for (i = 0; i <agent.count_pollfds; i++){
+		log_printf(LOG_DEBUG, "%d\n", agent.pollfds[i].fd);
+	}
+	log_printf(LOG_DEBUG,"\n");
+}
+
 int main(int argc, char *argv[])
 {
 	int n = 0;
@@ -606,6 +616,8 @@ int delete_fd_from_agent(int sockfd)
 	remove_fd_from_keytree(sockfd);
 	remove_fd_from_idtree(sockfd);
 	close(sockfd);
+
+	dump_pollfd();
 
 	for (i = 0; i < agent.count_pollfds; i++) {
 		if (agent.pollfds[i].fd == sockfd)
